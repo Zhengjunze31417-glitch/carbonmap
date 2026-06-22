@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+feedback.jsonl
+soil_contributions.csv
+server.log

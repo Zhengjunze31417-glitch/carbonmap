@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: carbonmap
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 2 --timeout 120 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: GEE_SERVICE_ACCOUNT_JSON
+        sync: false   # set manually in Render dashboard — never commit this value
+    autoDeploy: true

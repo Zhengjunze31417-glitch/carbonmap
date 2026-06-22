@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CarbonMap — Know Your Field</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Leaflet.draw -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --soc-lo: #fef3c7; --soc-hi: #78350f;
+      --agc-lo: #d1fae5; --agc-hi: #065f46;
+      --accent: #10b981;
+      --sidebar-w: 380px;
+      --radius: 12px;
+      --shadow: 0 4px 24px rgba(0,0,0,.12);
+    }
+
+    body { font-family: 'Inter', sans-serif; height: 100vh; overflow: hidden; background: #0f172a; }
+
+    /* ── Map ── */
+    #map { position: absolute; inset: 0; right: var(--sidebar-w); z-index: 0; transition: bottom .2s; }
+    body.chart-open #map { bottom: 380px; }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      position: absolute; top: 0; right: 0; bottom: 0;
+      width: var(--sidebar-w);
+      background: #fff;
+      z-index: 10;
+      box-shadow: -4px 0 32px rgba(0,0,0,.18);
+      overflow-y: auto;
+    }
+
+    /* Header */
+    .header {
+      padding: 20px 22px 16px;
+      border-bottom: 1px solid #e2e8f0;
+      background: linear-gradient(135deg, #064e3b 0%, #065f46 100%);
+      color: #fff;
+    }
+    .header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -.3px; }
+    .header p  { font-size: .78rem; opacity: .8; margin-top: 3px; }
+
+    /* Search */
+    .search-row {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .search-row label { font-size: .72rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .5px; display: block; margin-bottom: 6px; }
+    .search-wrap { display: flex; gap: 6px; }
+    #search-input {
+      flex: 1; padding: 9px 12px; border: 1.5px solid #e2e8f0; border-radius: 8px;
+      font-size: .875rem; font-family: inherit; outline: none; transition: border-color .15s;
+    }
+    #search-input:focus { border-color: var(--accent); }
+    .btn-icon {
+      padding: 9px 14px; background: var(--accent); color: #fff;
+      border: none; border-radius: 8px; cursor: pointer; font-size: .875rem;
+      font-weight: 600; font-family: inherit; transition: background .15s;
+      white-space: nowrap;
+    }
+    .btn-icon:hover { background: #059669; }
+
+    /* Draw controls */
+    .section { padding: 12px 16px 10px; border-bottom: 1px solid #f1f5f9; }
+    .section-label { font-size: .72rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; }
+    .draw-row { display: flex; gap: 8px; }
+    .btn-draw {
+      flex: 1; padding: 9px 10px; border: 1.5px solid #e2e8f0; background: #f8fafc;
+      border-radius: 8px; cursor: pointer; font-size: .8rem; font-weight: 500;
+      font-family: inherit; color: #334155; transition: all .15s; display: flex;
+      align-items: center; justify-content: center; gap: 5px;
+    }
+    .btn-draw:hover, .btn-draw.active { border-color: var(--accent); background: #ecfdf5; color: #065f46; }
+    .btn-clear {
+      padding: 9px 12px; border: 1.5px solid #fee2e2; background: #fff5f5;
+      border-radius: 8px; cursor: pointer; font-size: .8rem; font-weight: 500;
+      font-family: inherit; color: #b91c1c; transition: all .15s;
+    }
+    .btn-clear:hover { background: #fee2e2; }
+
+    /* Date pickers */
+    .date-section { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; }
+    .date-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .date-group label { font-size: .68rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .4px; display: block; margin-bottom: 4px; }
+    .date-group input[type=date] {
+      width: 100%; padding: 7px 9px; border: 1.5px solid #e2e8f0; border-radius: 8px;
+      font-size: .78rem; font-family: inherit; outline: none; color: #334155;
+      transition: border-color .15s;
+    }
+    .date-group input[type=date]:focus { border-color: var(--accent); }
+    .date-presets { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
+    .preset-btn {
+      padding: 4px 9px; border: 1.5px solid #e2e8f0; background: #f8fafc;
+      border-radius: 20px; font-size: .7rem; font-weight: 500; color: #475569;
+      cursor: pointer; font-family: inherit; transition: all .15s; white-space: nowrap;
+    }
+    .preset-btn:hover { border-color: var(--accent); color: #065f46; background: #ecfdf5; }
+
+    /* Imagery control (bottom-left) */
+    #imagery-control {
+      background: rgba(15,23,42,0.82); backdrop-filter: blur(6px);
+      border-radius: 10px; padding: 10px 12px; color: #fff;
+      font-family: Inter, sans-serif; font-size: 11px; min-width: 170px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.3);
+    }
+    #imagery-control .ic-label {
+      font-size: .65rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .5px; color: #94a3b8; margin-bottom: 6px;
+    }
+    #imagery-control select {
+      width: 100%; padding: 5px 6px; border-radius: 6px; border: none;
+      background: rgba(255,255,255,.12); color: #fff; font-size: .78rem;
+      font-family: inherit; cursor: pointer; margin-bottom: 6px;
+      outline: none;
+    }
+    #imagery-control select option { background: #1e293b; color: #fff; }
+    .captures-list {
+      display: flex; flex-wrap: wrap; gap: 4px;
+      margin: 6px 0; max-height: 72px; overflow-y: auto;
+      scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.2) transparent;
+    }
+    .capture-btn {
+      padding: 3px 8px; border: 1.5px solid rgba(255,255,255,.2);
+      border-radius: 4px; background: transparent; color: #cbd5e1;
+      font-size: .65rem; font-family: inherit; cursor: pointer; transition: all .15s;
+      white-space: nowrap;
+    }
+    .capture-btn:hover { background: rgba(255,255,255,.12); color: #fff; }
+    .capture-btn.active { background: #10b981; border-color: #10b981; color: #fff; }
+    .no-captures { font-size: .65rem; color: #64748b; line-height: 1.5; padding: 2px 0; }
+    #ic-status { font-size: .67rem; color: #64748b; min-height: 12px; }
+
+    /* Bottom chart panel */
+    #chart-panel {
+      display: none;
+      position: fixed; bottom: 0; left: 0; right: var(--sidebar-w);
+      height: 380px;
+      background: #fff;
+      border-top: 2px solid #e2e8f0;
+      box-shadow: 0 -8px 32px rgba(0,0,0,.14);
+      z-index: 9;
+      padding: 14px 28px 20px;
+      box-sizing: border-box;
+    }
+    #chart-panel.open { display: flex; flex-direction: column; }
+    #chart-panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0; margin-bottom: 10px;
+    }
+    #chart-panel-title {
+      font-size: .72rem; font-weight: 700; color: #64748b;
+      text-transform: uppercase; letter-spacing: .6px;
+    }
+    #chart-close-btn {
+      background: #f1f5f9; border: none; border-radius: 6px;
+      width: 26px; height: 26px; cursor: pointer; font-size: .85rem;
+      color: #64748b; display: flex; align-items: center; justify-content: center;
+    }
+    #chart-close-btn:hover { background: #e2e8f0; }
+    #year-progress { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
+    #year-chart-wrap { flex:1; min-height:0; position:relative; }
+
+    /* Info panel */
+    .info-panel {
+      overflow-y: auto; padding: 10px 16px 6px;
+      border-top: 1px solid #f1f5f9;
+    }
+    .info-panel.collapsed { padding-bottom: 10px; }
+    .info-panel-body { margin-top: 10px; }
+    .info-panel.collapsed .info-panel-body { display: none; }
+    .info-panel-hdr {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .info-toggle-btn {
+      width: 20px; height: 20px; border-radius: 50%;
+      border: 1.5px solid #cbd5e1; background: #fff; color: #64748b;
+      font-size: .7rem; cursor: pointer; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      font-family: inherit; transition: all .15s; flex-shrink: 0;
+    }
+    .info-toggle-btn:hover { border-color: var(--accent); color: #065f46; }
+    .info-section-label {
+      font-size: .68rem; font-weight: 700; color: #94a3b8;
+      text-transform: uppercase; letter-spacing: .5px;
+      display: block; margin-bottom: 8px;
+    }
+    .info-card {
+      border: 1.5px solid #e2e8f0; border-radius: 10px; overflow: hidden;
+      margin-bottom: 10px;
+    }
+    .info-card-header {
+      padding: 9px 12px; background: #f8fafc;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .info-card-title {
+      font-size: .78rem; font-weight: 700; color: #1e293b;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .info-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .agc-dot { background: #10b981; }
+    .soc-dot { background: #f59e0b; }
+    .info-r2 {
+      font-size: .67rem; font-weight: 600; padding: 2px 7px;
+      border-radius: 10px; white-space: nowrap;
+    }
+    .agc-r2 { background: #d1fae5; color: #065f46; }
+    .soc-r2 { background: #fef3c7; color: #92400e; }
+    .info-card-body {
+      padding: 9px 12px; font-size: .74rem; color: #475569; line-height: 1.55;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .info-row { display: flex; gap: 5px; }
+    .info-lbl { font-weight: 600; color: #334155; min-width: 54px; flex-shrink: 0; }
+    .info-warn {
+      margin-top: 4px; padding: 6px 9px; border-radius: 6px;
+      background: #fff7ed; color: #92400e; font-size: .71rem; line-height: 1.5;
+    }
+    .info-warn-soc { background: #fef2f2; color: #991b1b; }
+    .lim-card {
+      border: 1.5px solid #e2e8f0; border-radius: 10px;
+      padding: 9px 12px; margin-bottom: 10px;
+    }
+    .lim-row {
+      display: flex; gap: 8px; align-items: flex-start;
+      font-size: .73rem; color: #64748b; line-height: 1.5;
+    }
+    .lim-row + .lim-row { border-top: 1px solid #f1f5f9; padding-top: 5px; }
+    .lim-icon { flex-shrink: 0; font-size: .8rem; }
+
+    /* Feedback section */
+    .feedback-section {
+      flex-shrink: 0; border-top: 1px solid #e2e8f0;
+      padding: 12px 16px 14px; background: #f8fafc;
+    }
+    .feedback-section-label {
+      font-size: .68rem; font-weight: 700; color: #64748b;
+      text-transform: uppercase; letter-spacing: .5px; margin-bottom: 9px;
+    }
+    #feedback-text {
+      width: 100%; padding: 7px 9px; border: 1.5px solid #e2e8f0;
+      border-radius: 7px; font-size: .76rem; font-family: inherit;
+      color: #334155; resize: none; outline: none;
+      margin-bottom: 8px; display: block;
+    }
+    #feedback-text:focus { border-color: var(--accent); }
+    .feedback-row { display: flex; gap: 7px; }
+    .feedback-submit {
+      flex: 1; padding: 8px; background: #0f172a; color: #fff;
+      border: none; border-radius: 7px; font-size: .8rem; font-weight: 600;
+      font-family: inherit; cursor: pointer; transition: background .15s;
+    }
+    .feedback-submit:hover { background: #1e293b; }
+    .feedback-copy {
+      padding: 8px 12px; background: #fff; color: #475569;
+      border: 1.5px solid #e2e8f0; border-radius: 7px; font-size: .8rem;
+      font-family: inherit; cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .feedback-copy:hover { border-color: var(--accent); color: #065f46; }
+    .feedback-thanks {
+      font-size: .75rem; color: #10b981; font-weight: 600;
+      text-align: center; padding: 4px 0; display: none;
+    }
+
+    /* Upload section */
+    .upload-drop {
+      border: 1.5px dashed #e2e8f0; border-radius: 7px;
+      padding: 12px 10px; text-align: center; cursor: pointer;
+      font-size: .76rem; color: #94a3b8; margin-bottom: 8px;
+      transition: border-color .15s, background .15s; background: #fff;
+    }
+    .upload-drop:hover, .upload-drop.drag-over {
+      border-color: var(--accent); background: #f0fdf4; color: #065f46;
+    }
+    .upload-drop input[type=file] { display: none; }
+    .upload-drop { display: block; width: 100%; box-sizing: border-box; }
+    .upload-filename {
+      font-size: .74rem; color: #475569; margin-bottom: 8px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .upload-hint {
+      font-size: .69rem; color: #94a3b8; margin-bottom: 8px; line-height: 1.5;
+    }
+    .upload-hint code {
+      background: #f1f5f9; border-radius: 3px; padding: 1px 4px;
+      font-size: .68rem; color: #334155; font-family: monospace;
+    }
+    .upload-template {
+      font-size: .72rem; color: var(--accent); cursor: pointer;
+      text-decoration: underline; border: none; background: none;
+      font-family: inherit; padding: 0; margin-bottom: 8px; display: inline-block;
+    }
+    .upload-status {
+      font-size: .75rem; font-weight: 600; text-align: center;
+      padding: 4px 0; display: none;
+    }
+    .upload-status.ok  { color: #10b981; }
+    .upload-status.err { color: #b91c1c; }
+    .upload-field {
+      width: 100%; padding: 7px 9px; border: 1.5px solid #e2e8f0;
+      border-radius: 7px; font-size: .76rem; font-family: inherit;
+      color: #334155; outline: none; margin-bottom: 6px; display: block;
+      background: #fff;
+    }
+    .upload-field:focus { border-color: var(--accent); }
+    .upload-info-btn {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 1.5px solid #cbd5e1; background: #fff; color: #94a3b8;
+      font-size: .65rem; font-weight: 700; cursor: pointer; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      font-family: inherit; transition: all .15s; flex-shrink: 0;
+    }
+    .upload-info-btn:hover { border-color: var(--accent); color: #065f46; }
+
+    /* Donate section */
+    .donate-section {
+      flex-shrink: 0; border-top: 1px solid #e2e8f0;
+      padding: 12px 16px 14px; background: #fffbeb;
+      text-align: center;
+    }
+    .donate-msg {
+      font-size: .72rem; color: #92400e; margin-bottom: 9px; line-height: 1.5;
+    }
+    .donate-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #fbbf24; color: #1c1917; border: none; border-radius: 8px;
+      padding: 8px 18px; font-size: .82rem; font-weight: 700;
+      font-family: inherit; cursor: pointer; text-decoration: none;
+      transition: background .15s; letter-spacing: .01em;
+    }
+    .donate-btn:hover { background: #f59e0b; }
+
+    /* Leaflet overrides */
+    .leaflet-control-zoom { border-radius: 8px !important; }
+    .leaflet-draw-toolbar { border-radius: 8px !important; }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="sidebar">
+  <!-- Header -->
+  <div class="header">
+    <h1>🌱 CarbonMap</h1>
+    <p>Soil &amp; biomass carbon estimation from satellite data</p>
+  </div>
+
+  <!-- Search -->
+  <div class="search-row">
+    <label>Go to coordinates</label>
+    <div class="search-wrap">
+      <input id="search-input" type="text" placeholder="lat, lng  e.g. 24.649, 121.251" />
+      <button class="btn-icon" onclick="geocode()">Go</button>
+    </div>
+    <div id="search-error" style="font-size:.7rem;color:#b91c1c;margin-top:4px;display:none;"></div>
+  </div>
+
+  <!-- Draw -->
+  <div class="section">
+    <div class="section-label">Draw field boundary</div>
+    <div class="draw-row">
+      <button class="btn-draw" id="btn-polygon" onclick="startDraw('poly')">⬡ Polygon</button>
+      <button class="btn-clear" onclick="clearField()">✕ Clear</button>
+    </div>
+    <div id="area-hint" style="font-size:.72rem;color:#64748b;margin-top:4px;min-height:0;"></div>
+  </div>
+
+  <!-- Year chart -->
+  <div style="padding:0 16px 12px; display:flex; gap:8px; align-items:center;">
+    <select id="year-input"
+      style="width:90px;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:.85rem;color:#1e293b;background:#fff;cursor:pointer;">
+      <option value="2025">2025</option>
+      <option value="2024">2024</option>
+      <option value="2023">2023</option>
+      <option value="2022">2022</option>
+      <option value="2021">2021</option>
+      <option value="2020">2020</option>
+      <option value="2019">2019 ←earliest</option>
+    </select>
+    <button id="btn-year" disabled onclick="analyzeYear()"
+      style="flex:1;padding:10px;background:#0f172a;color:#fff;border:none;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer;opacity:.5;">
+      📊 Year Chart
+    </button>
+  </div>
+
+  <!-- Method & Limitations -->
+  <div class="info-panel" id="info-panel">
+    <div class="info-panel-hdr">
+      <div class="info-section-label" style="margin:0;">How it works &amp; limitations</div>
+      <button class="info-toggle-btn" id="info-toggle-btn" onclick="toggleInfoPanel()" title="Collapse">▴</button>
+    </div>
+    <div class="info-panel-body">
+    <div class="info-section-label" style="margin-top:10px;">Models</div>
+
+    <!-- AGC card -->
+    <div class="info-card">
+      <div class="info-card-header">
+        <div class="info-card-title">
+          <span class="info-dot agc-dot"></span>Above-Ground Carbon
+        </div>
+        <span class="info-r2 agc-r2">R² = 0.67</span>
+      </div>
+      <div class="info-card-body">
+        <div class="info-row">
+          <span class="info-lbl">Model</span>
+          XGBoost regression on log₁₊(AGC)
+        </div>
+        <div class="info-row">
+          <span class="info-lbl">Features</span>
+          Sentinel-2 B4/B8/B11, NDVI, EVI, NDMI, NIRv, DEM, slope, mean annual temperature &amp; precipitation (seasonal)
+        </div>
+        <div class="info-row">
+          <span class="info-lbl">Output</span>
+          MgC ha⁻¹ (tonnes carbon per hectare)
+        </div>
+        <div class="info-warn">
+          ⚠ Filter: NDVI &gt; 0.2 &amp; NDBI &lt; 0
+        </div>
+      </div>
+    </div>
+
+    <!-- SOC card -->
+    <div class="info-card">
+      <div class="info-card-header">
+        <div class="info-card-title">
+          <span class="info-dot soc-dot"></span>Soil Organic Carbon
+        </div>
+        <span class="info-r2 soc-r2">R² = 0.34</span>
+      </div>
+      <div class="info-card-body">
+        <div class="info-row">
+          <span class="info-lbl">Model</span>
+          XGBoost trained on WoSIS global field measurements
+        </div>
+        <div class="info-row">
+          <span class="info-lbl">Features</span>
+          17 spectral (bare-soil composites), topographic, and climate variables
+        </div>
+        <div class="info-row">
+          <span class="info-lbl">Output</span>
+          g kg⁻¹ (grams carbon per kg of soil)
+        </div>
+        <div class="info-warn info-warn-soc">
+          ⚠ Filter: NDVI &lt; 0.25 &amp; NBR2 &lt; 0.07 · RMSE = 42.7 g kg⁻¹
+        </div>
+      </div>
+    </div>
+
+    <!-- General limitations -->
+    <div class="info-section-label">Data &amp; limitations</div>
+    <div class="lim-card">
+      <div class="lim-row">
+        <span class="lim-icon">📡</span>
+        Sentinel-2 at 10–20 m resolution via Google Earth Engine. Monthly median composites, 2019–2025.
+      </div>
+      <div class="lim-row">
+        <span class="lim-icon">☁</span>
+        Cloud-contaminated months may return null values, especially in tropical or monsoon regions.
+      </div>
+      <div class="lim-row">
+        <span class="lim-icon">🌍</span>
+        Both models were trained on global datasets; predictions in under-represented regions may carry additional bias.
+      </div>
+      <div class="lim-row">
+        <span class="lim-icon">🗺</span>
+        Historical basemap via Esri Wayback — update frequency varies by region. Some areas have only 1–2 captures per year.
+      </div>
+    </div>
+    </div><!-- /info-panel-body -->
+  </div>
+
+  <!-- Contribute soil data -->
+  <div class="feedback-section">
+    <div class="feedback-section-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <span>Contribute field data</span>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button class="upload-template" style="margin:0;" onclick="downloadTemplate()">⬇ Template</button>
+        <button class="upload-info-btn" onclick="toggleUploadHint()" title="Show format info">?</button>
+      </div>
+    </div>
+    <div id="upload-hint-box" class="upload-hint" style="display:none;">
+      Required: <code>lat</code>, <code>lng</code> + at least one of <code>soc_g_kg</code> / <code>agc_mgc_ha</code>.
+      Optional: <code>date</code>, <code>depth_cm</code>, <code>notes</code>.
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px;">
+      <input class="upload-field" id="upload-name"  type="text"  placeholder="Name" style="flex:1;margin:0;" />
+      <input class="upload-field" id="upload-email" type="email" placeholder="Email" style="flex:1;margin:0;" />
+    </div>
+    <input class="upload-field" id="upload-institution" type="text" placeholder="Institution (optional)" />
+    <label class="upload-drop" id="upload-drop" ondragover="uploadDragOver(event)"
+        ondragleave="uploadDragLeave()" ondrop="uploadDrop(event)" onclick="document.getElementById('upload-file').click()">
+      <input type="file" id="upload-file" accept=".csv" onchange="uploadFileChosen(this)">
+      <span id="upload-drop-text">Click or drag a CSV file here</span>
+    </label>
+    <div class="feedback-row">
+      <button class="feedback-submit" onclick="submitUpload()">Upload</button>
+    </div>
+    <div class="upload-status" id="upload-status"></div>
+  </div>
+
+  <!-- Feedback -->
+  <div class="feedback-section">
+    <div class="feedback-section-label">Feedback</div>
+    <textarea id="feedback-text" rows="2"
+      placeholder="Feel free to leave any feedback or call out any issues."></textarea>
+    <div class="feedback-row">
+      <button class="feedback-submit" onclick="submitFeedback()">Submit</button>
+      <button class="feedback-copy" onclick="copyFeedback()" title="Copy feedback JSON">Copy</button>
+    </div>
+    <div class="feedback-thanks" id="feedback-thanks">✓ Feedback saved — thank you!</div>
+  </div>
+
+
+</div>
+
+<!-- Bottom chart panel (spans map width) -->
+<div id="chart-panel">
+  <div id="chart-panel-header">
+    <span id="chart-panel-title"></span>
+    <button id="chart-close-btn" onclick="closeChartPanel()">✕</button>
+  </div>
+  <div id="year-progress">
+    <div style="font-size:1.5rem;">📡</div>
+    <div id="year-progress-text" style="color:#64748b;font-size:.82rem;">Starting…</div>
+    <div style="font-size:.72rem;color:#94a3b8;">Analyzing 12 months in parallel · ~3 min</div>
+  </div>
+  <div id="year-chart-wrap">
+    <canvas id="year-chart-canvas"></canvas>
+  </div>
+</div>
+
+<script>
+// ── Map setup ────────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true, maxZoom: 19 }).setView([20, 0], 3);
+
+// Fallback basemap shown only while Wayback is loading
+const baseSatellite = L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  { attribution: 'Tiles © Esri', maxZoom: 19 }
+).addTo(map);
+
+// ── Sentinel-2 live preview ───────────────────────────────────────────────────
+let s2Layer = null;
+let previewTimer = null;
+let previewLoading = false;
+let s2Opacity = 0;
+
+// ── Imagery selector control (bottom-left) ───────────────────────────────────
+const imageryControl = L.control({ position: 'bottomleft' });
+imageryControl.onAdd = () => {
+  const div = L.DomUtil.create('div', '');
+  div.id = 'imagery-control';
+  div.innerHTML = `
+    <div class="ic-label">🌍 Satellite imagery</div>
+    <select id="imagery-year" onchange="onYearChange()">
+      ${[2025,2024,2023,2022,2021,2020,2019,2018,2017,2016,2015,2014]
+        .map(y => `<option value="${y}">${y}</option>`).join('')}
+    </select>
+    <div id="captures-list" class="captures-list">
+      <span class="no-captures">Locating imagery…</span>
+    </div>
+    <div id="ic-status"></div>
+  `;
+  L.DomEvent.disableClickPropagation(div);
+  return div;
+};
+imageryControl.addTo(map);
+
+function getPreviewBounds() {
+  if (currentPolygon) {
+    const b = currentPolygon.getBounds();
+    return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+  }
+  const b = map.getBounds();
+  return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+}
+
+function schedulePreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(fetchPreview, 900);
+}
+
+async function fetchPreview() {
+  try {
+    const r = await fetch('/api/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bounds: getPreviewBounds(), soc_date: '' }),
+    });
+    const data = await r.json();
+    if (data.tile_url) applyS2Layer(data.tile_url);
+  } catch { /* silent — S2 preview is non-critical */ }
+}
+
+function applyS2Layer(tileUrl) {
+  if (s2Layer) { map.removeLayer(s2Layer); s2Layer = null; }
+  s2Layer = L.tileLayer(tileUrl, {
+    attribution: 'Sentinel-2 © ESA / Google Earth Engine',
+    maxZoom: 20, opacity: s2Opacity,
+  }).addTo(map);
+}
+
+// ── Esri Wayback historical imagery ──────────────────────────────────────────
+let waybackLayer = null;
+let baseSatOnMap = true;
+let allReleases = [];          // [{id, date, tile_url}, …] newest first
+let selectedReleaseId = null;
+let releasesFetchTimer = null;
+
+function releaseToTileUrl(id) {
+  return `https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/${id}/{z}/{y}/{x}`;
+}
+
+async function fetchReleases() {
+  const center = map.getCenter();
+  const zoom = Math.min(Math.max(map.getZoom(), 5), 13);
+  const container = document.getElementById('captures-list');
+  if (container) container.innerHTML = '<span class="no-captures">Locating imagery…</span>';
+  try {
+    const resp = await fetch(`/api/wayback/releases?lat=${center.lat}&lng=${center.lng}&zoom=${zoom}`);
+    const data = await resp.json();
+    if (data.error || !data.releases) return;
+    allReleases = data.releases;
+    const yearEl = document.getElementById('imagery-year');
+    // Set year dropdown to the most recent year with data
+    if (yearEl && allReleases.length > 0 && !selectedReleaseId) {
+      yearEl.value = allReleases[0].date.slice(0, 4);
+    }
+    updateCapturesList(/* autoSelect= */ !selectedReleaseId);
+  } catch (e) {
+    const container = document.getElementById('captures-list');
+    if (container) container.innerHTML = '<span class="no-captures">⚠ Failed to load</span>';
+  }
+}
+
+function updateCapturesList(autoSelect) {
+  const container = document.getElementById('captures-list');
+  const yearEl = document.getElementById('imagery-year');
+  if (!container || !yearEl) return;
+  const year = parseInt(yearEl.value, 10);
+  const captures = allReleases.filter(r => r.date.startsWith(year + '-'));
+
+  if (captures.length === 0) {
+    const years = [...new Set(allReleases.map(r => r.date.slice(0, 4)))].slice(0, 5);
+    container.innerHTML = `<span class="no-captures">No updates in ${year}.<br>Available: ${years.join(', ')}</span>`;
+    return;
+  }
+
+  container.innerHTML = captures.map(r => {
+    const d = new Date(r.date + 'T12:00:00');
+    const label = d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+    return `<button class="capture-btn${r.id === selectedReleaseId ? ' active' : ''}" onclick="loadRelease(${r.id}, '${r.date}', '${r.tile_url}')">${label}</button>`;
+  }).join('');
+
+  if (autoSelect) {
+    const first = captures[0];
+    loadRelease(first.id, first.date, first.tile_url);
+  }
+}
+
+function onYearChange() {
+  updateCapturesList(/* autoSelect= */ true);
+}
+
+function loadRelease(id, date, tileUrl) {
+  selectedReleaseId = id;
+  updateCapturesList(/* autoSelect= */ false);
+
+  const tilePane = map.getPanes().tilePane;
+  tilePane.style.transition = 'opacity 0.15s';
+  tilePane.style.opacity = '0';
+
+  if (waybackLayer) { map.removeLayer(waybackLayer); waybackLayer = null; }
+  waybackLayer = L.tileLayer(tileUrl || releaseToTileUrl(id), {
+    attribution: '© Esri, Maxar, Earthstar Geographics',
+    maxZoom: 21, maxNativeZoom: 19,
+  });
+  waybackLayer.addTo(map);
+  if (baseSatOnMap) { map.removeLayer(baseSatellite); baseSatOnMap = false; }
+  if (s2Layer) s2Layer.bringToFront();
+
+  setTimeout(() => { tilePane.style.opacity = '1'; }, 150);
+  const icStatus = document.getElementById('ic-status');
+  if (icStatus) icStatus.textContent = `✓ ${date}`;
+}
+
+function offsetDate(dateStr, days) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return isoDate(d);
+}
+
+function setPreviewBadge(text, color) {
+  let badge = document.getElementById('s2-badge');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.id = 's2-badge';
+    badge.style.cssText = `
+      position:absolute; bottom:28px; left:12px; z-index:1000;
+      background:rgba(0,0,0,.68); padding:5px 11px; border-radius:20px;
+      font-size:.72rem; font-family:Inter,sans-serif;
+      backdrop-filter:blur(4px); pointer-events:none; max-width:360px;
+    `;
+    document.getElementById('map').appendChild(badge);
+  }
+  badge.style.color = color;
+  badge.textContent = text;
+}
+
+function clearS2Layer() {
+  if (s2Layer) { map.removeLayer(s2Layer); s2Layer = null; }
+  const badge = document.getElementById('s2-badge');
+  if (badge) badge.remove();
+  clearTimeout(previewTimer);
+}
+
+// Refresh releases when map pans (debounced); also refresh S2 if needed
+map.on('moveend', () => {
+  if (currentPolygon && s2Opacity > 0) schedulePreview();
+  clearTimeout(releasesFetchTimer);
+  releasesFetchTimer = setTimeout(fetchReleases, 1200);
+});
+
+// Load real imagery captures on startup
+fetchReleases();
+
+// Draw feature group
+const drawnItems = new L.FeatureGroup().addTo(map);
+
+const drawControl = new L.Control.Draw({
+  draw: {
+    polygon: { shapeOptions: { color: '#10b981', weight: 2 }, allowIntersection: false },
+    rectangle: false, circle: false, polyline: false, circlemarker: false, marker: false,
+  },
+  edit: { featureGroup: drawnItems },
+});
+map.addControl(drawControl);
+
+let currentPolygon = null;
+let activeMode = null;
+
+// ── Draw event ───────────────────────────────────────────────────────────────
+map.on(L.Draw.Event.CREATED, e => {
+  drawnItems.clearLayers();
+  drawnItems.addLayer(e.layer);
+  currentPolygon = e.layer;
+  updateAreaHint();
+  document.getElementById('btn-year').disabled = false; document.getElementById('btn-year').style.opacity = '1';
+  setDrawActive(null);
+  // Re-fetch preview zoomed to the drawn field
+  map.fitBounds(currentPolygon.getBounds(), { padding: [40, 40] });
+  schedulePreview();
+});
+
+map.on(L.Draw.Event.EDITED, () => updateAreaHint());
+map.on(L.Draw.Event.DELETED, () => {
+  currentPolygon = null;
+  document.getElementById('btn-year').disabled = true; document.getElementById('btn-year').style.opacity = '.5';
+  document.getElementById('area-hint').textContent = '';
+});
+
+// ── Draw controls ────────────────────────────────────────────────────────────
+let drawHandler = null;
+
+function startDraw(mode) {
+  if (drawHandler) { drawHandler.disable(); drawHandler = null; }
+  if (mode === activeMode) { activeMode = null; setDrawActive(null); return; }
+  activeMode = mode;
+  setDrawActive(mode);
+  drawHandler = new L.Draw.Polygon(map, drawControl.options.draw.polygon);
+  drawHandler.enable();
+}
+
+function setDrawActive(mode) {
+  document.getElementById('btn-polygon').classList.toggle('active', mode === 'poly');
+}
+
+function clearField() {
+  drawnItems.clearLayers();
+  clearS2Layer();
+  currentPolygon = null;
+  document.getElementById('btn-year').disabled = true; document.getElementById('btn-year').style.opacity = '.5';
+  document.getElementById('area-hint').textContent = '';
+}
+
+function updateAreaHint() {
+  const ha = computeAreaHa();
+  if (ha !== null)
+    document.getElementById('area-hint').textContent = `Field area ≈ ${ha.toFixed(2)} ha`;
+}
+
+function computeAreaHa() {
+  if (!currentPolygon) return null;
+  let latlngs = currentPolygon.getLatLngs();
+  if (Array.isArray(latlngs[0])) latlngs = latlngs[0];
+  if (!latlngs.length) return null;
+  const lat0 = latlngs.reduce((s, p) => s + p.lat, 0) / latlngs.length;
+  const mLat = 111320, mLng = 111320 * Math.cos(lat0 * Math.PI / 180);
+  const n = latlngs.length;
+  let area = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    area += (latlngs[i].lng * mLng) * (latlngs[j].lat * mLat)
+          - (latlngs[j].lng * mLng) * (latlngs[i].lat * mLat);
+  }
+  return Math.abs(area) / 2 / 10000;
+}
+
+function getPolygonCoords() {
+  if (!currentPolygon) return null;
+  let latlngs = currentPolygon.getLatLngs();
+  if (Array.isArray(latlngs[0])) latlngs = latlngs[0];
+  return latlngs.map(p => [p.lng, p.lat]);
+}
+
+function isoDate(d) { return d.toISOString().slice(0, 10); }
+
+// ── Geocode (coordinates only) ────────────────────────────────────────────────
+function geocode() {
+  const q = document.getElementById('search-input').value.trim();
+  const errEl = document.getElementById('search-error');
+  errEl.style.display = 'none';
+  if (!q) return;
+  // Accept "lat, lng" or "lat lng" with optional degree symbols
+  const m = q.replace(/[°]/g, '').match(/^(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)$/);
+  if (!m) {
+    errEl.textContent = 'Enter coordinates as: latitude, longitude';
+    errEl.style.display = 'block';
+    return;
+  }
+  const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    errEl.textContent = 'Latitude −90 to 90, longitude −180 to 180';
+    errEl.style.display = 'block';
+    return;
+  }
+  map.setView([lat, lng], 14);
+}
+document.getElementById('search-input').addEventListener('keydown', e => { if (e.key === 'Enter') geocode(); });
+
+
+// ── Year Chart ───────────────────────────────────────────────────────────────
+let yearChart = null;
+let yearData  = null;
+
+async function analyzeYear() {
+  const polygon = getPolygonCoords();
+  if (!polygon) return;
+  const year = parseInt(document.getElementById('year-input').value);
+
+  const yearEl = document.getElementById('imagery-year');
+  if (yearEl) { yearEl.value = year; updateCapturesList(true); }
+
+  const panel = document.getElementById('chart-panel');
+  panel.classList.add('open');
+  document.body.classList.add('chart-open');
+  document.getElementById('chart-panel-title').textContent = `Carbon Profile ${year}`;
+  document.getElementById('year-progress').style.display = 'flex';
+  document.getElementById('year-chart-wrap').style.display = 'none';
+  document.getElementById('year-progress-text').textContent = 'Starting…';
+  setTimeout(() => map.invalidateSize(), 220);
+
+  const r = await fetch('/api/analyze_year', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({polygon, year}),
+  });
+  const {job_id} = await r.json();
+
+  const iv = setInterval(async () => {
+    const s = await (await fetch(`/api/status/${job_id}`)).json();
+    if (s.progress) document.getElementById('year-progress-text').textContent = s.progress;
+    if (s.status === 'done') {
+      clearInterval(iv);
+      yearData = s.result;
+      renderYearChart(yearData);
+    } else if (s.status === 'error') {
+      clearInterval(iv);
+      document.getElementById('year-progress-text').textContent = '⚠ ' + s.error;
+    }
+  }, 3000);
+}
+
+function closeChartPanel() {
+  document.getElementById('chart-panel').classList.remove('open');
+  document.body.classList.remove('chart-open');
+  setTimeout(() => map.invalidateSize(), 220);
+}
+
+function renderYearChart(data) {
+  document.getElementById('year-progress').style.display = 'none';
+  document.getElementById('year-chart-wrap').style.display = 'flex';
+
+  if (yearChart) yearChart.destroy();
+  const ctx = document.getElementById('year-chart-canvas').getContext('2d');
+
+  const agcUpper = data.agc.map((v, i) => v != null && data.agc_std[i] != null ? v + data.agc_std[i] : null);
+  const agcLower = data.agc.map((v, i) => v != null && data.agc_std[i] != null ? v - data.agc_std[i] : null);
+  const socUpper = data.soc.map((v, i) => v != null && data.soc_std[i] != null ? v + data.soc_std[i] : null);
+  const socLower = data.soc.map((v, i) => v != null && data.soc_std[i] != null ? v - data.soc_std[i] : null);
+
+  yearChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.months,
+      datasets: [
+        // AGC ± std shaded band
+        { label: '_agc_hi', data: agcUpper, borderWidth: 0, pointRadius: 0, fill: false, tension: 0.35, yAxisID: 'yAgc', spanGaps: true },
+        { label: '_agc_lo', data: agcLower, borderWidth: 0, pointRadius: 0, fill: '-1', backgroundColor: 'rgba(16,185,129,0.15)', tension: 0.35, yAxisID: 'yAgc', spanGaps: true },
+        // AGC mean line + dots
+        {
+          label: 'AGC (MgC/ha)',
+          data: data.agc,
+          borderColor: '#10b981', backgroundColor: '#10b981',
+          borderWidth: 2, pointRadius: 6, pointHoverRadius: 8,
+          pointBackgroundColor: '#10b981', tension: 0.35, spanGaps: false, yAxisID: 'yAgc',
+        },
+        // SOC ± std shaded band
+        { label: '_soc_hi', data: socUpper, borderWidth: 0, pointRadius: 0, fill: false, tension: 0.35, yAxisID: 'ySoc', spanGaps: true },
+        { label: '_soc_lo', data: socLower, borderWidth: 0, pointRadius: 0, fill: '-1', backgroundColor: 'rgba(245,158,11,0.12)', tension: 0.35, yAxisID: 'ySoc', spanGaps: true },
+        // SOC mean line + dots
+        {
+          label: 'SOC (g/kg)',
+          data: data.soc,
+          borderColor: '#f59e0b', backgroundColor: '#f59e0b',
+          borderWidth: 2, pointRadius: 6, pointHoverRadius: 8,
+          pointBackgroundColor: '#f59e0b', tension: 0.35, spanGaps: false, yAxisID: 'ySoc',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {mode: 'index', intersect: false},
+      plugins: {
+        title: {
+          display: true,
+          text: `Carbon Profile ${data.year}  ·  ${data.area_ha?.toFixed(2) ?? '—'} ha`,
+          font: {size: 15, weight: '600', family: 'Inter'}, padding: {bottom: 16},
+        },
+        legend: {
+          position: 'top',
+          labels: { filter: item => !item.text.startsWith('_') },
+        },
+        tooltip: {
+          filter: item => !item.dataset.label.startsWith('_'),
+          callbacks: {
+            label: ctx => {
+              const i = ctx.dataIndex;
+              if (ctx.dataset.label === 'AGC (MgC/ha)') {
+                const v = data.agc[i], s = data.agc_std[i];
+                return v != null ? `AGC: ${v.toFixed(1)} ± ${s?.toFixed(1) ?? '?'} MgC/ha` : 'AGC: N/A';
+              }
+              const v = data.soc[i], s = data.soc_std[i];
+              return v != null ? `SOC: ${v.toFixed(1)} ± ${s?.toFixed(1) ?? '?'} g/kg` : 'SOC: N/A';
+            },
+          },
+        },
+      },
+      scales: {
+        yAgc: {
+          type: 'linear', position: 'left', min: 0,
+          title: {display: true, text: 'AGC (MgC/ha)', color: '#10b981', font: {weight: '600'}},
+          ticks: {color: '#10b981'}, grid: {color: 'rgba(0,0,0,0.06)'},
+        },
+        ySoc: {
+          type: 'linear', position: 'right', min: 0,
+          title: {display: true, text: 'SOC (g/kg)', color: '#d97706', font: {weight: '600'}},
+          ticks: {color: '#d97706'}, grid: {drawOnChartArea: false},
+        },
+      },
+    },
+  });
+}
+
+
+// ── Feedback ─────────────────────────────────────────────────────────────────
+function _buildFeedbackPayload() {
+  const polygon = getPolygonCoords();
+  const center = polygon
+    ? polygon.reduce((a, p) => [a[0] + p[0] / polygon.length, a[1] + p[1] / polygon.length], [0, 0])
+    : null;
+  return {
+    timestamp: new Date().toISOString(),
+    comment: document.getElementById('feedback-text').value.trim(),
+    polygon_pts: polygon?.length ?? 0,
+    center_lng_lat: center ? center.map(v => +v.toFixed(5)) : null,
+    map_zoom: map.getZoom(),
+  };
+}
+
+function submitFeedback() {
+  const payload = _buildFeedbackPayload();
+  if (!payload.comment) {
+    document.getElementById('feedback-text').focus();
+    return;
+  }
+  fetch('/api/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+  const thanks = document.getElementById('feedback-thanks');
+  thanks.style.display = 'block';
+  document.getElementById('feedback-text').value = '';
+  setTimeout(() => { thanks.style.display = 'none'; }, 3000);
+}
+
+function copyFeedback() {
+  const text = JSON.stringify(_buildFeedbackPayload(), null, 2);
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.feedback-copy');
+    const prev = btn.textContent;
+    btn.textContent = '✓ Copied';
+    setTimeout(() => { btn.textContent = prev; }, 1500);
+  });
+}
+
+// ── Soil data upload ──────────────────────────────────────────────────────────
+let _uploadFile = null;
+
+function uploadDragOver(e) {
+  e.preventDefault();
+  document.getElementById('upload-drop').classList.add('drag-over');
+}
+function uploadDragLeave() {
+  document.getElementById('upload-drop').classList.remove('drag-over');
+}
+function uploadDrop(e) {
+  e.preventDefault();
+  uploadDragLeave();
+  const file = e.dataTransfer.files[0];
+  if (file) _setUploadFile(file);
+}
+function uploadFileChosen(input) {
+  if (input.files[0]) _setUploadFile(input.files[0]);
+}
+function _setUploadFile(file) {
+  _uploadFile = file;
+  document.getElementById('upload-drop-text').textContent = '📄 ' + file.name;
+  const fn = document.getElementById('upload-filename');
+  fn.style.display = 'none';
+  _showUploadStatus('', '');
+}
+
+async function submitUpload() {
+  if (!_uploadFile) {
+    _showUploadStatus('err', 'Please select a CSV file first.');
+    return;
+  }
+  const form = new FormData();
+  form.append('file', _uploadFile);
+  form.append('name',        document.getElementById('upload-name').value.trim());
+  form.append('email',       document.getElementById('upload-email').value.trim());
+  form.append('institution', document.getElementById('upload-institution').value.trim());
+  _showUploadStatus('ok', 'Uploading…');
+  try {
+    const res = await fetch('/api/upload_soil', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) {
+      _showUploadStatus('err', data.error || 'Upload failed.');
+    } else {
+      const msg = `✓ ${data.accepted} row${data.accepted !== 1 ? 's' : ''} accepted` +
+        (data.skipped ? ` · ${data.skipped} skipped` : '');
+      _showUploadStatus('ok', msg);
+      _uploadFile = null;
+      document.getElementById('upload-file').value = '';
+      document.getElementById('upload-drop-text').textContent = 'Click or drag a CSV file here';
+      document.getElementById('upload-name').value = '';
+      document.getElementById('upload-email').value = '';
+      document.getElementById('upload-institution').value = '';
+    }
+  } catch {
+    _showUploadStatus('err', 'Network error — please try again.');
+  }
+}
+
+function _showUploadStatus(type, msg) {
+  const el = document.getElementById('upload-status');
+  el.className = 'upload-status' + (type ? ' ' + type : '');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function downloadTemplate() {
+  window.location.href = '/api/soil_template';
+}
+
+function toggleInfoPanel() {
+  const panel = document.getElementById('info-panel');
+  const btn   = document.getElementById('info-toggle-btn');
+  const collapsed = panel.classList.toggle('collapsed');
+  btn.textContent = collapsed ? '▾' : '▴';
+  btn.title = collapsed ? 'Expand' : 'Collapse';
+}
+
+function toggleUploadHint() {
+  const box = document.getElementById('upload-hint-box');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+</script>
+
+
+</body>
+</html>
