@@ -14,7 +14,6 @@ from typing import Callable
 import os
 
 import ee
-import geemap
 import joblib
 import numpy as np
 import pandas as pd
@@ -146,7 +145,8 @@ def _sample(image: ee.Image, geo: ee.Geometry, n: int) -> pd.DataFrame:
     sampled = image.sample(
         region=geo, scale=20, numPixels=n, geometries=True, tileScale=4, seed=42
     )
-    return geemap.ee_to_df(sampled)
+    features = sampled.getInfo().get("features", [])
+    return pd.DataFrame([f["properties"] for f in features])
 
 
 def _extract_coords(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
