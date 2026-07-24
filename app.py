@@ -98,6 +98,18 @@ def index():
     return send_from_directory("static", "index.html")
 
 
+@app.get("/sitemap.xml")
+def sitemap():
+    xml = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://carbonmap.onrender.com/</loc>
+    <priority>1.0</priority>
+  </url>
+</urlset>"""
+    return Response(xml, mimetype="application/xml")
+
+
 @app.post("/api/analyze")
 def analyze():
     body = request.get_json(silent=True) or {}
